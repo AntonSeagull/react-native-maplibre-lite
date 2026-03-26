@@ -1,5 +1,6 @@
 
 export type MarkerProps = {
+    ignoreFitBounds?: boolean,
     uniqueId: string,
     onPress?: () => void,
     latitude: number,
@@ -9,6 +10,7 @@ export type MarkerProps = {
     iconUrl?: string,
     iconWidth?: number,
     iconHeight?: number,
+    html?: string,
 
 }
 
@@ -19,6 +21,7 @@ export type SourcesProps = {
 }
 
 export type PolygonProps = {
+    ignoreFitBounds?: boolean,
     uniqueId: string,
     coordinates: [number, number][],
     fillColor?: string,
@@ -30,6 +33,7 @@ export type PolygonProps = {
 }
 
 export type PolylineProps = {
+    ignoreFitBounds?: boolean,
     uniqueId: string,
     color?: string,
     width?: number,

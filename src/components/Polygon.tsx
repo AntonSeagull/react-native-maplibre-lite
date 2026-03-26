@@ -4,7 +4,7 @@ import {
 } from 'react';
 
 import { useMapViewContext } from './MapView';
-import { type PolygonProps } from './types';
+import type { PolygonProps } from './types';
 
 export const Polygon = (props: PolygonProps) => {
     const { addPolygon, removePolygon } = useMapViewContext();
@@ -19,13 +19,13 @@ export const Polygon = (props: PolygonProps) => {
             addPolygon(props);
             lastRenderProps.current = serialized;
         }
-    }, [props, addPolygon]);
+    }, [props]);
 
     useEffect(() => {
         return () => {
             removePolygon(propsRef.current);
         };
-    }, [removePolygon]);
+    }, []);
 
     return null;
 };

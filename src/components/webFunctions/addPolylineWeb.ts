@@ -36,8 +36,8 @@ if(functionName === 'addPolyline') {
             'line-cap': 'round'
         },
         'paint': {
-            'line-color': params.color ?? '#000000',
-            'line-width': params.width ?? 4
+            'line-color': (params.color != null) ? params.color : '#000000',
+            'line-width': (params.width != null) ? params.width : 4
         }
     });
 

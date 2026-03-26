@@ -58,23 +58,19 @@ export default  /*js*/`
             }
 
 
+
+
              map = new maplibregl.Map({
             container: 'map',
-            style: params.style,
-              //Moscow coordinates
-              center: params.center, // starting position [lng, lat]
-              zoom: params.zoom, // starting zoom
-
-
-              // общий выключатель
-              zoomControl: params.zoomEnabled,
-              // точнее
-              scrollZoom: params.scrollEnabled,   // колесо мыши / трекпад
+            style: params.mapStyle,
+              center: params.center,
+              zoom: params.zoom,
+              scrollZoom: params.scrollEnabled,
               doubleClickZoom: params.zoomEnabled,
               touchZoomRotate: params.zoomEnabled,
               minZoom: params.minZoom,
-            maxZoom: params.maxZoom,
-            dragPan: params.scrollEnabled,   // запрет перетаскивания
+              maxZoom: params.maxZoom,
+              dragPan: params.scrollEnabled,
               dragRotate: params.zoomEnabled,
               antialias: params.antialias ?? false,
               crossSourceCollisions: params.crossSourceCollisions ?? true,
@@ -104,34 +100,40 @@ export default  /*js*/`
 
 
                     return {
-                        center,
-                        zoom
+                        center: center,
+                        zoom: zoom
                     }
                 }
+
+                map.on('error', function(event){
+
+                 
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'error', params: event }));
+                })
                             
               //movestart moveend
-              map.on("movestart",(event)=>{
+              map.on("movestart", function(event){
                 if(params.turboWhileMoving){
                   setOverlayLayersVisibility(map, 'none');
                 }
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'movestart', params: getEventParams() }));
               })
-              map.on("moveend",(event)=>{
+              map.on("moveend", function(event){
                 if(params.turboWhileMoving){
                   setOverlayLayersVisibility(map, 'visible');
                 }
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'moveend', params: getEventParams() }));
               })
               /*zoomstart zoomend*/
-              map.on("zoomstart",(event)=>{
+              map.on("zoomstart", function(event){
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'zoomstart', params: getEventParams() }));
               })
-              map.on("zoomend",(event)=>{
+              map.on("zoomend", function(event){
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'zoomend', params: getEventParams() }));
               })
             
 
-              map.on("idle",(event)=>{
+              map.on("idle", function(event){
                   window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'event', event: 'idle', params: getEventParams() }));
               })
            

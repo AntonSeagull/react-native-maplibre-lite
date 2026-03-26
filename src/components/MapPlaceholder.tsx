@@ -1,5 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Image } from 'react-native';
+import {
+  useEffect,
+  useRef,
+} from 'react';
+
+import { Animated } from 'react-native';
 
 import { MAP_ASSETS } from '../assets/MAP_ASSETS';
 
@@ -10,12 +14,12 @@ const MapPlaceholder = (props: { theme: 'dark' | 'light' }) => {
         const animate = () => {
             Animated.sequence([
                 Animated.timing(opacityAnim, {
-                    toValue: 1,
+                    toValue: 0.6,
                     duration: 1000,
                     useNativeDriver: true,
                 }),
                 Animated.timing(opacityAnim, {
-                    toValue: 0.5,
+                    toValue: 0.1,
                     duration: 1000,
                     useNativeDriver: true,
                 }),
@@ -34,7 +38,7 @@ const MapPlaceholder = (props: { theme: 'dark' | 'light' }) => {
                 left: 0,
                 width: '100%',
                 height: '100%',
-                zIndex: 1000,
+
                 opacity: opacityAnim,
             }}
         />

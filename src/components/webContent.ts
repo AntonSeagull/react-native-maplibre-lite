@@ -1,44 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import type {SourcesProps} from './types';
+import {loadResources} from './utils';
 
-import type { SourcesProps } from './components/types';
-
-const CACHE_VERSION = 'v1';
-
-const loadResources = async (url: string) => {
-    const cacheKey = `${url}@${CACHE_VERSION}`;
-
-    try {
-        const stored = await AsyncStorage.getItem(cacheKey);
-        if (stored) {
-            return stored;
-        }
-    } catch (_) {
-        // cache miss — proceed to fetch
-    }
-
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to load resource: ${url} (${response.status})`);
-    }
-    const text = await response.text();
-
-    if (text) {
-        try {
-            await AsyncStorage.setItem(cacheKey, text);
-        } catch (_) {
-            // storage full or unavailable — non-fatal
-        }
-    }
-    return text;
-}
-
-export const maplibreHtmlMap = async (webFunctions: string, sources: SourcesProps) => {
+export const maplibreHtmlMap = async (webFunctions: string, sources: SourcesProps, debugMode: boolean) => {
     //Загружаем скрипты как текст
 
 
     let maplibreJS = await loadResources(sources.maplibreJS);
     let maplibreCSS = await loadResources(sources.maplibreCSS);
     let pmtiles = await loadResources(sources.pmtilesJS);
+
+    console.log('MapLibre: maplibreJS', !!maplibreJS ? 'true' : 'false');
+    console.log('MapLibre: maplibreCSS', !!maplibreCSS ? 'true' : 'false');
+    console.log('MapLibre: pmtiles', !!pmtiles ? 'true' : 'false');
 
 
 
@@ -127,11 +100,9 @@ var layouts = {};
 var map = null;
 
 try {
-    let protocol = new pmtiles.Protocol();
+    var protocol = new pmtiles.Protocol();
     maplibregl.addProtocol("pmtiles", protocol.tile);
-} catch (e) {
-    console.error('pmtiles init error:', e.message);
-}
+
   window.onload = function () {
         document.addEventListener("message", function (event) {
             receiveMessage(event.data);
@@ -145,7 +116,7 @@ try {
     }
 
 
-  const receiveMessage = (message) => {
+  function receiveMessage(message) {
 
       var data = JSON.parse(message);
 
@@ -163,6 +134,9 @@ try {
 ${webFunctions}
 
 } catch (e) {
+    if(${debugMode}){
+        alert('WebView function error: ' + functionName + ' ' + e.message);
+    }
     console.error('WebView function error:', functionName, e.message);
     window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'error',
@@ -174,7 +148,14 @@ ${webFunctions}
 }
     };
 
+} catch (e) {
 
+    if(${debugMode}){
+        alert('pmtiles init error: ' + e.message);
+    }
+
+  
+}
 </script>
 
 

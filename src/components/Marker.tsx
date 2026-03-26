@@ -4,7 +4,7 @@ import {
 } from 'react';
 
 import { useMapViewContext } from './MapView';
-import { type MarkerProps } from './types';
+import type { MarkerProps } from './types';
 
 export const Marker = (props: MarkerProps) => {
     const { addMarker, removeMarker } = useMapViewContext();
@@ -19,13 +19,13 @@ export const Marker = (props: MarkerProps) => {
             addMarker(props);
             lastRenderProps.current = serialized;
         }
-    }, [props, addMarker]);
+    }, [props]);
 
     useEffect(() => {
         return () => {
             removeMarker(propsRef.current);
         };
-    }, [removeMarker]);
+    }, []);
 
     return null;
 };

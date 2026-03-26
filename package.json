@@ -1,6 +1,6 @@
 {
   "name": "react-native-maplibre-lite",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lightweight MapLibre GL JS wrapper using WebView",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",

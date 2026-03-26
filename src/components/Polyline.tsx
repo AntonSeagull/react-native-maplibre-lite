@@ -19,13 +19,13 @@ export const Polyline = (props: PolylineProps) => {
             addPolyline(props);
             lastRenderProps.current = serialized;
         }
-    }, [props, addPolyline]);
+    }, [props]);
 
     useEffect(() => {
         return () => {
             removePolyline(propsRef.current);
         };
-    }, [removePolyline]);
+    }, []);
 
     return null;
 };

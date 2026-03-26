@@ -1,47 +1,66 @@
 import {
-  createContext,
-  forwardRef,
-  useCallback,
-  useContext,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
+    createContext,
+    forwardRef,
+    useContext,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState,
 } from 'react';
 
 import {
-  type StyleProp,
-  Platform,
-  View,
-  type ViewStyle,
+    type StyleProp,
+    Platform,
+    View,
+    type ViewStyle,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { maplibreHtmlMap } from '../webContent';
 import MapPlaceholder from './MapPlaceholder';
 import MapSelectPoint, { type MapSelectPointType } from './MapSelectPoint';
 import {
-  type EventParams,
-  type MarkerProps,
-  type PolygonProps,
-  type PolylineProps,
-  type SourcesProps,
+    type EventParams,
+    type MarkerProps,
+    type PolygonProps,
+    type PolylineProps,
+    type SourcesProps,
 } from './types';
+import { loadResources } from './utils';
+import { maplibreHtmlMap } from './webContent';
 import addMarkerWeb from './webFunctions/addMarkerWeb';
 import addPolygonWeb from './webFunctions/addPolygonWeb';
 import addPolylineWeb from './webFunctions/addPolylineWeb';
 import fitBoundsWeb from './webFunctions/fitBoundsWeb';
+import { flyToWeb } from './webFunctions/flyToWeb';
 import initWeb from './webFunctions/initWeb';
 import removeMarkerWeb from './webFunctions/removeMarkerWeb';
 import removePolygonWeb from './webFunctions/removePolygonWeb';
 import removePolylineWeb from './webFunctions/removePolylineWeb';
+import updateWeb from './webFunctions/updateWeb';
+
+interface UpdateProps {
+    center?: [number, number];
+    zoom?: number;
+    minZoom?: number;
+    maxZoom?: number;
+    zoomEnabled?: boolean;
+    scrollEnabled?: boolean;
+    mapStyle?: string;
+}
 
 interface MapViewProps {
     children?: React.ReactNode;
 
-    theme: 'light' | 'dark';
+
+    placeholderTheme?: 'light' | 'dark';
     center: [number, number];
     zoom: number;
+
+    debugMode?: boolean;
+    autoFitBounds?: boolean;
+    fitBoundsPadding?: number;
+    fitBoundsDuration?: number;
+    flyToDuration?: number;
 
     mapStyle: string;
     style: StyleProp<ViewStyle>;
@@ -49,6 +68,7 @@ interface MapViewProps {
     maxZoom?: number;
     zoomEnabled?: boolean;
     scrollEnabled?: boolean;
+    onReady?: () => void;
     onMoveStart?: (eventParams: EventParams) => void;
     onMoveEnd?: (eventParams: EventParams) => void;
     onZoomStart?: (eventParams: EventParams) => void;
@@ -66,6 +86,7 @@ interface MapViewProps {
 
 export type MapViewRef = {
     fitBounds: () => void;
+    flyTo: (center: [number, number], zoom: number) => void;
 };
 
 type MapViewRegistry = {
@@ -94,6 +115,8 @@ const webFunctionsString = [
     addPolygonWeb,
     removePolygonWeb,
     fitBoundsWeb,
+    flyToWeb,
+    updateWeb
 ].join('\n');
 
 const getBoundsFromCoords = (
@@ -122,7 +145,7 @@ const getBoundsFromCoords = (
 };
 
 export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
-    const webViewRef = useRef<any>(null);
+    const webViewRef = useRef<WebView | null>(null);
     const [inited, setInited] = useState(false);
     const [html, setHtml] = useState('');
 
@@ -135,18 +158,28 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
         ? 0.85
         : (performanceMode === 'balanced' && Platform.OS === 'android' ? 1 : undefined);
 
-    const sendToWebView = useCallback((message: { function: string; params: any }) => {
+    const sendToWebView = (message: { function: string; params: any }) => {
+        if (__DEV__) {
+            console.log('MapView: sendToWebView', message);
+        }
         webViewRef.current?.postMessage(JSON.stringify(message));
-    }, []);
+    };
 
-    const initMap = useCallback(() => {
+    const initMap = async () => {
+        if (__DEV__) {
+            console.log('MapView: initMap');
+            console.log('MapView: props.mapStyle', props.mapStyle);
+        }
+
+        const mapStyleText = await loadResources(props.mapStyle);
+        const mapStyle = JSON.parse(mapStyleText);
+
         sendToWebView({
             function: 'init',
             params: {
-                style: props.mapStyle,
+                mapStyle: mapStyle,
                 zoomEnabled: props.zoomEnabled ?? false,
                 scrollEnabled: props.scrollEnabled ?? false,
-                theme: props.theme,
                 center: props.center,
                 zoom: props.zoom,
                 minZoom: props.minZoom,
@@ -162,72 +195,142 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                 turboWhileMoving: props.turboWhileMoving ?? (performanceMode === 'performance'),
             },
         });
-    }, [sendToWebView, props.zoomEnabled, props.scrollEnabled, props.theme, props.center, props.zoom, props.minZoom, props.maxZoom, props.mapStyle, performanceMode, props.pixelRatio, fallbackPixelRatio, props.turboWhileMoving]);
+    };
 
-    const addMarker = useCallback((propsMarker: MarkerProps) => {
-        if (propsMarker.latitude && propsMarker.longitude) {
-            coordsInMapRef.current[propsMarker.uniqueId] = [[propsMarker.longitude, propsMarker.latitude]];
-        }
-
+    const updateMarkerClickHandler = (propsMarker: MarkerProps) => {
         if (propsMarker.onPress) {
             markersClickHandlers.current[propsMarker.uniqueId] = propsMarker.onPress;
         } else {
             delete markersClickHandlers.current[propsMarker.uniqueId];
         }
+    };
+
+    const addMarker = (propsMarker: MarkerProps) => {
+        if (propsMarker.latitude != null && propsMarker.longitude != null && !propsMarker.ignoreFitBounds) {
+            coordsInMapRef.current[propsMarker.uniqueId] = [[propsMarker.longitude, propsMarker.latitude]];
+        }
+
+        updateMarkerClickHandler(propsMarker);
 
         sendToWebView({ function: 'addMarker', params: propsMarker });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const removeMarker = useCallback((propsMarker: MarkerProps) => {
+    const removeMarker = (propsMarker: MarkerProps) => {
         delete coordsInMapRef.current[propsMarker.uniqueId];
         delete markersClickHandlers.current[propsMarker.uniqueId];
         sendToWebView({ function: 'removeMarker', params: propsMarker });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const addPolyline = useCallback((propsPolyline: PolylineProps) => {
-        if (propsPolyline.coordinates) {
+    const addPolyline = (propsPolyline: PolylineProps) => {
+        if (propsPolyline.coordinates && !propsPolyline.ignoreFitBounds) {
             coordsInMapRef.current[propsPolyline.uniqueId] = propsPolyline.coordinates;
         }
         sendToWebView({ function: 'addPolyline', params: propsPolyline });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const removePolyline = useCallback((propsPolyline: PolylineProps) => {
+    const removePolyline = (propsPolyline: PolylineProps) => {
         delete coordsInMapRef.current[propsPolyline.uniqueId];
         sendToWebView({ function: 'removePolyline', params: propsPolyline });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const addPolygon = useCallback((propsPolygon: PolygonProps) => {
-        if (propsPolygon.coordinates) {
+    const addPolygon = (propsPolygon: PolygonProps) => {
+        if (propsPolygon.coordinates && !propsPolygon.ignoreFitBounds) {
             coordsInMapRef.current[propsPolygon.uniqueId] = propsPolygon.coordinates;
         }
         sendToWebView({ function: 'addPolygon', params: propsPolygon });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const removePolygon = useCallback((propsPolygon: PolygonProps) => {
+    const removePolygon = (propsPolygon: PolygonProps) => {
         delete coordsInMapRef.current[propsPolygon.uniqueId];
         sendToWebView({ function: 'removePolygon', params: propsPolygon });
-    }, [sendToWebView]);
+        scheduleAutoFitBounds();
+    };
 
-    const fitBounds = useCallback(() => {
+    const autoFitBoundsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const scheduleAutoFitBounds = () => {
+        if (!props.autoFitBounds) return;
+        if (autoFitBoundsTimeoutRef.current) {
+            clearTimeout(autoFitBoundsTimeoutRef.current);
+        }
+        autoFitBoundsTimeoutRef.current = setTimeout(() => {
+            fitBounds();
+        }, 1000);
+    };
+
+    useEffect(() => {
+        scheduleAutoFitBounds();
+    }, [props.autoFitBounds, props.fitBoundsPadding]);
+
+    const fitBounds = () => {
         const coords = Object.values(coordsInMapRef.current).flat();
-        if (coords.length === 0) return;
+        if (coords.length <= 1) return;
 
         const bounds = getBoundsFromCoords(coords);
-        sendToWebView({ function: 'fitBounds', params: { bounds } });
-    }, [sendToWebView]);
+        sendToWebView({ function: 'fitBounds', params: { bounds, padding: props.fitBoundsPadding ?? 40, duration: props.fitBoundsDuration ?? 500 } });
+    };
+
+    const flyTo = (center: [number, number], zoom: number) => {
+        sendToWebView({ function: 'flyTo', params: { center, zoom, duration: props.flyToDuration ?? 500 } });
+    };
 
     useImperativeHandle(ref, () => ({
         fitBounds,
+        flyTo,
     }), [fitBounds]);
+
+
+
+    const lastPropsRef = useRef<MapViewProps>(props);
+
+    useEffect(() => {
+        const updateProps: UpdateProps = {};
+
+        if (lastPropsRef.current.minZoom !== props.minZoom) {
+            updateProps.minZoom = props.minZoom;
+        }
+
+        if (lastPropsRef.current.maxZoom !== props.maxZoom) {
+            updateProps.maxZoom = props.maxZoom;
+        }
+
+        if (lastPropsRef.current.zoomEnabled !== props.zoomEnabled) {
+            updateProps.zoomEnabled = props.zoomEnabled;
+        }
+
+        if (lastPropsRef.current.scrollEnabled !== props.scrollEnabled) {
+            updateProps.scrollEnabled = props.scrollEnabled;
+        }
+
+        if (lastPropsRef.current.mapStyle !== props.mapStyle) {
+            updateProps.mapStyle = props.mapStyle;
+        }
+
+        lastPropsRef.current = props;
+
+        if (Object.keys(updateProps).length > 0) {
+            sendToWebView({ function: 'update', params: updateProps });
+        }
+    }, [props.minZoom, props.maxZoom, props.zoomEnabled, props.scrollEnabled, props.mapStyle]);
+
 
     useEffect(() => {
         if (html) return;
-        maplibreHtmlMap(webFunctionsString, props.sources).then(setHtml);
-    }, [html, props.sources]);
+        maplibreHtmlMap(webFunctionsString, props.sources, props.debugMode ?? false).then(setHtml);
+    }, []);
 
-    const onReceiveMessageFromWebView = useCallback((data: string) => {
+    const onReceiveMessageFromWebView = (data: string) => {
         try {
             const msg = JSON.parse(data);
+
+            if (__DEV__) {
+                console.log('MapView: event', msg);
+            }
 
             if (msg.type === 'event') {
                 switch (msg.event) {
@@ -253,6 +356,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
             }
 
             if (msg.type === 'inited') {
+                props.onReady?.();
                 setInited(true);
                 return;
             }
@@ -274,22 +378,20 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                 console.warn('MapView: failed to parse WebView message', e);
             }
         }
-    }, [props.onMoveStart, props.onMoveEnd, props.onZoomStart, props.onZoomEnd, props.onIdle, initMap]);
+    };
 
     return (
         <View style={props.style}>
-            {!inited && (
-                <MapPlaceholder theme={props.theme} />
-            )}
 
             <MapViewContext.Provider
                 value={{
-                    addPolygon,
-                    removePolygon,
                     addMarker,
                     removeMarker,
+
                     addPolyline,
                     removePolyline,
+                    addPolygon,
+                    removePolygon,
                 }}
             >
                 <WebView
@@ -328,6 +430,10 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                     </View>
                 )}
             </MapViewContext.Provider>
+            {!inited && (
+                <MapPlaceholder theme={props.placeholderTheme ?? 'light'} />
+            )}
+
         </View>
     );
 });
