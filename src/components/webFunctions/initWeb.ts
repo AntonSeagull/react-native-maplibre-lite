@@ -12,8 +12,38 @@ export default  /*js*/`
                 var layerType = layer.type;
                 var shouldHide = false;
 
-                if(layerType === 'symbol' || layerType === 'fill-extrusion' || layerType === 'hillshade'){
+                // Keep labels (streets / addresses) visible — hide only expensive visual layers by default.
+                if(layerType === 'fill-extrusion' || layerType === 'hillshade'){
                   shouldHide = true;
+                }
+
+                if(layerType === 'symbol' && aggressive){
+                  var idLower = String(layerId || '').toLowerCase();
+                  var sourceLayerLower = String(layer['source-layer'] || '').toLowerCase();
+
+                  // Keep road + address/house number labels.
+                  var keepLabel =
+                    idLower.indexOf('road') !== -1 ||
+                    idLower.indexOf('street') !== -1 ||
+                    idLower.indexOf('housenumber') !== -1 ||
+                    idLower.indexOf('house_number') !== -1 ||
+                    idLower.indexOf('house-number') !== -1 ||
+                    idLower.indexOf('address') !== -1 ||
+                    sourceLayerLower.indexOf('housenumber') !== -1 ||
+                    sourceLayerLower.indexOf('house') !== -1 ||
+                    sourceLayerLower.indexOf('address') !== -1;
+
+                  // Hide most POI/other symbols in aggressive mode.
+                  var hideSymbol =
+                    idLower.indexOf('poi') !== -1 ||
+                    idLower.indexOf('transit') !== -1 ||
+                    idLower.indexOf('airport') !== -1 ||
+                    idLower.indexOf('rail') !== -1 ||
+                    idLower.indexOf('ferry') !== -1;
+
+                  if(!keepLabel && hideSymbol){
+                    shouldHide = true;
+                  }
                 }
 
                 if(aggressive && (layerType === 'line' || layerType === 'circle')){
