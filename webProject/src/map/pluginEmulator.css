@@ -1,0 +1,66 @@
+.plugin-emulator {
+  flex-shrink: 0;
+  z-index: 10;
+  padding: 8px 10px 10px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  font:
+    13px/1.35 system-ui,
+    sans-serif;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.plugin-emulator__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.plugin-emulator__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.plugin-emulator__btn {
+  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(30, 41, 59, 0.95);
+  color: #f1f5f9;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.plugin-emulator__btn:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: #94a3b8;
+}
+
+.plugin-emulator__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.plugin-emulator__error {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(127, 29, 29, 0.45);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.plugin-emulator__hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}

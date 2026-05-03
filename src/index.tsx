@@ -7,4 +7,16 @@ export { MapView, Marker, Polygon, Polyline };
 export default MapView;
 
 export type { MapViewRef } from './components/MapView';
-export type { MarkerProps, PolygonProps, PolylineProps, EventParams, SourcesProps } from './components/types';
+export type {
+    EventParams,
+    MapLiteWebError,
+    MarkerProps,
+    NavigatorInstructionParams,
+    NavigatorLang,
+    NavigatorLngLat,
+    NavigatorPositionMode,
+    NavigatorPositionSetParams,
+    NavigatorRouteSetParams,
+    PolygonProps,
+    PolylineProps,
+} from './components/types';

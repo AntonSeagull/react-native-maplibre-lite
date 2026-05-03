@@ -20,23 +20,17 @@ import MapPlaceholder from './MapPlaceholder';
 import MapSelectPoint, { type MapSelectPointType } from './MapSelectPoint';
 import {
     type EventParams,
+    type MapLiteWebError,
     type MarkerProps,
+    type NavigatorInstructionParams,
+    type NavigatorLang,
+    type NavigatorPositionSetParams,
+    type NavigatorRouteSetParams,
     type PolygonProps,
     type PolylineProps,
-    type SourcesProps,
 } from './types';
 import { loadResources } from './utils';
-import { maplibreHtmlMap } from './webContent';
-import addMarkerWeb from './webFunctions/addMarkerWeb';
-import addPolygonWeb from './webFunctions/addPolygonWeb';
-import addPolylineWeb from './webFunctions/addPolylineWeb';
-import fitBoundsWeb from './webFunctions/fitBoundsWeb';
-import { flyToWeb } from './webFunctions/flyToWeb';
-import initWeb from './webFunctions/initWeb';
-import removeMarkerWeb from './webFunctions/removeMarkerWeb';
-import removePolygonWeb from './webFunctions/removePolygonWeb';
-import removePolylineWeb from './webFunctions/removePolylineWeb';
-import updateWeb from './webFunctions/updateWeb';
+import { MAP_HTML } from './webMapBuild';
 
 interface UpdateProps {
     center?: [number, number];
@@ -81,12 +75,38 @@ interface MapViewProps {
     pixelRatio?: number;
     turboWhileMoving?: boolean;
 
-    sources: SourcesProps;
+    /**
+     * Включает режим навигатора в WebView (стрелка, маршрут GraphHopper, HUD).
+     * Должен совпадать с билдом `webMapBuild` / `MapLiteController`.
+     */
+    navigator?: boolean;
+    /**
+     * Базовый URL GraphHopper для маршрутов навигатора (без обязательного `/route`).
+     * Нужен для `setNavigatorPoint` и пересчёта маршрута.
+     */
+    graphhopperUrl?: string;
+    /** Язык HUD и инструкций навигатора. По умолчанию веб-часть использует `ru`. */
+    navigatorLang?: NavigatorLang;
+    onNavigatorRouteSet?: (params: NavigatorRouteSetParams) => void;
+    onNavigatorInstruction?: (params: NavigatorInstructionParams) => void;
+    onNavigatorPositionSet?: (params: NavigatorPositionSetParams) => void;
+    /** Ошибки команд WebView (`type: 'error'` из карты). */
+    onMapLiteError?: (err: MapLiteWebError) => void;
 }
 
 export type MapViewRef = {
     fitBounds: () => void;
     flyTo: (center: [number, number], zoom: number) => void;
+    /** Построить маршрут до точки (нужен `navigator: true` в MapView). */
+    setNavigatorPoint: (latitude: number, longitude: number) => void;
+    /** Следующая пошаговая инструкция (для отладки / ручного шага). */
+    advanceNavigatorInstruction: () => void;
+    /**
+     * Обновить «текущую позицию» (GPS): snap / reroute / прибытие — на стороне WebView.
+     */
+    setNavigatorPosition: (latitude: number, longitude: number) => void;
+    /** Режим «клик по карте = новая позиция» (удобно в dev). */
+    pickNavigatorPosition: () => void;
 };
 
 type MapViewRegistry = {
@@ -105,19 +125,6 @@ export const useMapViewContext = () => {
     if (!ctx) throw new Error('useMapViewContext must be used within <MapView>');
     return ctx;
 };
-
-const webFunctionsString = [
-    initWeb,
-    addMarkerWeb,
-    removeMarkerWeb,
-    addPolylineWeb,
-    removePolylineWeb,
-    addPolygonWeb,
-    removePolygonWeb,
-    fitBoundsWeb,
-    flyToWeb,
-    updateWeb
-].join('\n');
 
 const getBoundsFromCoords = (
     coords: [number, number][]
@@ -147,7 +154,6 @@ const getBoundsFromCoords = (
 export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
     const webViewRef = useRef<WebView | null>(null);
     const [inited, setInited] = useState(false);
-    const [html, setHtml] = useState('');
 
     const coordsInMapRef = useRef<Record<string, [number, number][]>>({});
     const markersClickHandlers = useRef<Record<string, () => void>>({});
@@ -193,6 +199,10 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                 maxPitch: performanceMode === 'performance' ? 0 : 45,
                 renderWorldCopies: performanceMode === 'quality',
                 turboWhileMoving: props.turboWhileMoving ?? (performanceMode === 'performance'),
+                debugMode: props.debugMode ?? false,
+                navigator: props.navigator === true,
+                graphhopperUrl: props.graphhopperUrl,
+                navigatorLang: props.navigatorLang,
             },
         });
     };
@@ -279,9 +289,29 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
         sendToWebView({ function: 'flyTo', params: { center, zoom, duration: props.flyToDuration ?? 500 } });
     };
 
+    const setNavigatorPoint = (latitude: number, longitude: number) => {
+        sendToWebView({ function: 'setNavigatorPoint', params: { latitude, longitude } });
+    };
+
+    const advanceNavigatorInstruction = () => {
+        sendToWebView({ function: 'advanceNavigatorInstruction', params: {} });
+    };
+
+    const setNavigatorPosition = (latitude: number, longitude: number) => {
+        sendToWebView({ function: 'setNavigatorPosition', params: { latitude, longitude } });
+    };
+
+    const pickNavigatorPosition = () => {
+        sendToWebView({ function: 'pickNavigatorPosition', params: {} });
+    };
+
     useImperativeHandle(ref, () => ({
         fitBounds,
         flyTo,
+        setNavigatorPoint,
+        advanceNavigatorInstruction,
+        setNavigatorPosition,
+        pickNavigatorPosition,
     }), [fitBounds]);
 
 
@@ -319,11 +349,6 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
     }, [props.minZoom, props.maxZoom, props.zoomEnabled, props.scrollEnabled, props.mapStyle]);
 
 
-    useEffect(() => {
-        if (html) return;
-        maplibreHtmlMap(webFunctionsString, props.sources, props.debugMode ?? false).then(setHtml);
-    }, []);
-
     const onReceiveMessageFromWebView = (data: string) => {
         try {
             const msg = JSON.parse(data);
@@ -351,7 +376,21 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                     case 'idle':
                         props.onIdle?.(msg.params);
                         break;
+                    case 'navigatorRouteSet':
+                        props.onNavigatorRouteSet?.(msg.params as NavigatorRouteSetParams);
+                        break;
+                    case 'navigatorInstruction':
+                        props.onNavigatorInstruction?.(msg.params as NavigatorInstructionParams);
+                        break;
+                    case 'navigatorPositionSet':
+                        props.onNavigatorPositionSet?.(msg.params as NavigatorPositionSetParams);
+                        break;
                 }
+                return;
+            }
+
+            if (msg.type === 'error' && msg.data) {
+                props.onMapLiteError?.(msg.data as MapLiteWebError);
                 return;
             }
 
@@ -398,7 +437,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                     ref={webViewRef}
                     style={{ flex: 1, backgroundColor: 'transparent' }}
                     originWhitelist={['*']}
-                    source={{ html }}
+                    source={{ html: MAP_HTML }}
                     onMessage={event => {
                         onReceiveMessageFromWebView(event.nativeEvent.data);
                     }}
