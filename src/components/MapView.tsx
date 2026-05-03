@@ -1,33 +1,33 @@
 import {
-    createContext,
-    forwardRef,
-    useContext,
-    useEffect,
-    useImperativeHandle,
-    useRef,
-    useState,
+  createContext,
+  forwardRef,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
 } from 'react';
 
 import {
-    type StyleProp,
-    Platform,
-    View,
-    type ViewStyle,
+  Platform,
+  type StyleProp,
+  View,
+  type ViewStyle,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import MapPlaceholder from './MapPlaceholder';
 import MapSelectPoint, { type MapSelectPointType } from './MapSelectPoint';
 import {
-    type EventParams,
-    type MapLiteWebError,
-    type MarkerProps,
-    type NavigatorInstructionParams,
-    type NavigatorLang,
-    type NavigatorPositionSetParams,
-    type NavigatorRouteSetParams,
-    type PolygonProps,
-    type PolylineProps,
+  type EventParams,
+  type MapLiteWebError,
+  type MarkerProps,
+  type NavigatorInstructionParams,
+  type NavigatorLang,
+  type NavigatorPositionSetParams,
+  type NavigatorRouteSetParams,
+  type PolygonProps,
+  type PolylineProps,
 } from './types';
 import { loadResources } from './utils';
 import { MAP_HTML } from './webMapBuild';
@@ -92,6 +92,9 @@ interface MapViewProps {
     onNavigatorPositionSet?: (params: NavigatorPositionSetParams) => void;
     /** Ошибки команд WebView (`type: 'error'` из карты). */
     onMapLiteError?: (err: MapLiteWebError) => void;
+
+
+    developerLocalhostBundleUrl?: string;
 }
 
 export type MapViewRef = {
@@ -437,7 +440,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                     ref={webViewRef}
                     style={{ flex: 1, backgroundColor: 'transparent' }}
                     originWhitelist={['*']}
-                    source={{ html: MAP_HTML }}
+                    source={!!props.developerLocalhostBundleUrl ? { uri: props.developerLocalhostBundleUrl } : { html: MAP_HTML }}
                     onMessage={event => {
                         onReceiveMessageFromWebView(event.nativeEvent.data);
                     }}
