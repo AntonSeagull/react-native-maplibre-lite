@@ -11,12 +11,16 @@ export type {
     EventParams,
     MapLiteWebError,
     MarkerProps,
+    NavigatorChromeParams,
     NavigatorInstructionParams,
     NavigatorLang,
     NavigatorLngLat,
+    NavigatorProfile,
     NavigatorPositionMode,
     NavigatorPositionSetParams,
     NavigatorRouteSetParams,
     PolygonProps,
     PolylineProps,
 } from './components/types';
+
+export { NAVIGATOR_PROFILE_IDS } from './components/types';

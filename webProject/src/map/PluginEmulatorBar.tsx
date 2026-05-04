@@ -52,6 +52,7 @@ type Props = {
 }
 
 export function PluginEmulatorBar({ send }: Props) {
+  const [panelHidden, setPanelHidden] = useState(false)
   const [busy, setBusy] = useState(false)
   const [zoomEnabled, setZoomEnabled] = useState(true)
   const [scrollEnabled, setScrollEnabled] = useState(true)
@@ -84,9 +85,41 @@ export function PluginEmulatorBar({ send }: Props) {
     </button>
   )
 
+  if (panelHidden) {
+    return (
+      <button
+        type="button"
+        className="plugin-emulator__peek"
+        aria-expanded={false}
+        aria-controls="plugin-emulator-panel"
+        title="Показать панель отладки RN → Web"
+        onClick={() => setPanelHidden(false)}
+      >
+        Dev
+      </button>
+    )
+  }
+
   return (
-    <div className="plugin-emulator" role="region" aria-label="Эмулятор команд React Native">
-      <div className="plugin-emulator__title">RN → Web (как postMessage)</div>
+    <div
+      id="plugin-emulator-panel"
+      className="plugin-emulator"
+      role="region"
+      aria-label="Эмулятор команд React Native"
+    >
+      <div className="plugin-emulator__head">
+        <div className="plugin-emulator__title">RN → Web (как postMessage)</div>
+        <button
+          type="button"
+          className="plugin-emulator__hide"
+          aria-expanded={true}
+          aria-controls="plugin-emulator-panel"
+          title="Скрыть панель отладки"
+          onClick={() => setPanelHidden(true)}
+        >
+          Скрыть
+        </button>
+      </div>
       <div className="plugin-emulator__row">
         {btn('init', async () => {
           const mapStyle = await resolveDevMapStyle()

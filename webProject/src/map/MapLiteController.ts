@@ -1,12 +1,24 @@
-import maplibregl, { type Map, type Marker } from 'maplibre-gl'
-import { Protocol } from 'pmtiles'
+import maplibregl, {
+  type Map,
+  type Marker,
+} from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 
-import { applyMaplite3dBuildings, bindCameraPitchFor3dBuildings } from './maplite3dBuildings'
-import { normalizeGraphhopperBaseUrl } from './graphhopperUrl'
-import { type NavigatorLang } from './local'
-import { Navigator, NAVIGATOR_MIN_MAX_PITCH, type NavigatorPoint } from './navigator'
-import { postToNative } from './nativeBridge'
-import type { EventParams } from './types'
+import { normalizeGraphhopperBaseUrl } from './graphhopperUrl';
+import { type NavigatorLang } from './local';
+import {
+  applyMaplite3dBuildings,
+  bindCameraPitchFor3dBuildings,
+} from './maplite3dBuildings';
+import { postToNative } from './nativeBridge';
+import {
+  Navigator,
+  NAVIGATOR_MIN_MAX_PITCH,
+  type NavigatorChromeParams,
+  type NavigatorPoint,
+  type NavigatorProfile,
+} from './navigator';
+import type { EventParams } from './types';
 
 let pmtilesProtocolInstalled = false
 
@@ -59,6 +71,16 @@ export type InitParams = {
    * Используется только при `navigator: true`.
    */
   navigatorLang?: NavigatorLang
+  /**
+   * Профиль GraphHopper для построения маршрута (`profile` в API).
+   * Если не задан или неизвестная строка — `car`. Только при `navigator: true`.
+   */
+  navigatorProfile?: NavigatorProfile | string
+  /**
+   * Оформление навигатора: линия маршрута, стрелка, верхняя панель (все поля необязательны).
+   * Знак скорости на панели не настраивается.
+   */
+  navigatorChrome?: NavigatorChromeParams
 }
 
 export type SetNavigatorPointParams = {
@@ -437,6 +459,8 @@ export class MapLiteController {
           position: center,
           graphhopperBaseUrl,
           lang: params.navigatorLang,
+          navigatorProfile: params.navigatorProfile,
+          chrome: params.navigatorChrome,
         })
       }
       postToNative({ type: 'inited' })
@@ -648,6 +672,10 @@ export class MapLiteController {
 
   private handleFitBounds(params: FitBoundsParams): void {
     if (!this.map) return
+
+
+
+
     const padding = params.padding ?? 40
     const duration = params.duration ?? 500
     this.map.fitBounds(params.bounds, { padding, duration })

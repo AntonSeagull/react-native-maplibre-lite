@@ -16,18 +16,23 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import Geolocation from '@react-native-community/geolocation';
+import KeepAwake from '@sayem314/react-native-keep-awake';
+
 import MapPlaceholder from './MapPlaceholder';
 import MapSelectPoint, { type MapSelectPointType } from './MapSelectPoint';
 import {
-  type EventParams,
-  type MapLiteWebError,
-  type MarkerProps,
-  type NavigatorInstructionParams,
-  type NavigatorLang,
-  type NavigatorPositionSetParams,
-  type NavigatorRouteSetParams,
-  type PolygonProps,
-  type PolylineProps,
+    type EventParams,
+    type MapLiteWebError,
+    type MarkerProps,
+    type NavigatorChromeParams,
+    type NavigatorInstructionParams,
+    type NavigatorLang,
+    type NavigatorProfile,
+    type NavigatorPositionSetParams,
+    type NavigatorRouteSetParams,
+    type PolygonProps,
+    type PolylineProps,
 } from './types';
 import { loadResources } from './utils';
 import { MAP_HTML } from './webMapBuild';
@@ -87,6 +92,16 @@ interface MapViewProps {
     graphhopperUrl?: string;
     /** Язык HUD и инструкций навигатора. По умолчанию веб-часть использует `ru`. */
     navigatorLang?: NavigatorLang;
+    /**
+     * Профиль GraphHopper для маршрута (`profile` в API).
+     * Неизвестная строка или отсутствие — как `car`. Только при `navigator: true`.
+     */
+    navigatorProfile?: NavigatorProfile | string;
+    /**
+     * Navigator chrome: route line, arrow accent, HUD colors. All keys optional.
+     * Sent once in WebView `init` as `navigatorChrome`.
+     */
+    navigatorChrome?: NavigatorChromeParams;
     onNavigatorRouteSet?: (params: NavigatorRouteSetParams) => void;
     onNavigatorInstruction?: (params: NavigatorInstructionParams) => void;
     onNavigatorPositionSet?: (params: NavigatorPositionSetParams) => void;
@@ -154,9 +169,17 @@ const getBoundsFromCoords = (
     ];
 };
 
+/** Минимальный интервал между отправками позиции в WebView (мост RN↔JS). */
+const NAVIGATOR_GPS_FORWARD_MIN_MS = 500;
+
 export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
     const webViewRef = useRef<WebView | null>(null);
     const [inited, setInited] = useState(false);
+    const initedRef = useRef(false);
+
+    useEffect(() => {
+        initedRef.current = inited;
+    }, [inited]);
 
     const coordsInMapRef = useRef<Record<string, [number, number][]>>({});
     const markersClickHandlers = useRef<Record<string, () => void>>({});
@@ -173,6 +196,9 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
         }
         webViewRef.current?.postMessage(JSON.stringify(message));
     };
+
+    const sendToWebViewRef = useRef(sendToWebView);
+    sendToWebViewRef.current = sendToWebView;
 
     const initMap = async () => {
         if (__DEV__) {
@@ -206,6 +232,8 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
                 navigator: props.navigator === true,
                 graphhopperUrl: props.graphhopperUrl,
                 navigatorLang: props.navigatorLang,
+                navigatorProfile: props.navigatorProfile,
+                navigatorChrome: props.navigatorChrome,
             },
         });
     };
@@ -422,6 +450,56 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
         }
     };
 
+    useEffect(() => {
+        if (!props.navigator) {
+            return;
+        }
+
+        let lastForwardedAt = 0;
+
+        const watchId = Geolocation.watchPosition(
+            (position) => {
+                if (!initedRef.current) {
+                    return;
+                }
+
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                    return;
+                }
+
+                const now = Date.now();
+                if (now - lastForwardedAt < NAVIGATOR_GPS_FORWARD_MIN_MS) {
+                    return;
+                }
+                lastForwardedAt = now;
+
+                sendToWebViewRef.current({
+                    function: 'setNavigatorPosition',
+                    params: { latitude: lat, longitude: lng },
+                });
+            },
+            (error) => {
+                console.error('MapView: error watching position', error);
+            },
+            {
+                enableHighAccuracy: true,
+                /** Android: желаемый интервал обновлений от провайдера. */
+                interval: 1000,
+                fastestInterval: 1000,
+                /** iOS / часть сценариев: не слать, если сдвиг меньше N метров. */
+                distanceFilter: 1,
+                /** Не опираться на слишком старый кэш при запросе точки. */
+                maximumAge: 2000,
+            }
+        );
+
+        return () => {
+            Geolocation.clearWatch(watchId);
+        };
+    }, [props.navigator]);
+
     return (
         <View style={props.style}>
 
@@ -475,6 +553,7 @@ export const MapView = forwardRef<MapViewRef, MapViewProps>((props, ref) => {
             {!inited && (
                 <MapPlaceholder theme={props.placeholderTheme ?? 'light'} />
             )}
+            {!!props.navigator && <KeepAwake />}
 
         </View>
     );

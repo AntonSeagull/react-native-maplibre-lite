@@ -1,6 +1,6 @@
 {
   "name": "react-native-maplibre-lite",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Lightweight MapLibre GL JS wrapper using WebView",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -13,6 +13,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "demo",
     "src",
     "lib",
     "android",
@@ -88,7 +89,9 @@
     "react-native": "*",
     "react-native-webview": "*",
     "@react-native-async-storage/async-storage": "*",
-    "@types/geojson": "*"
+    "@sayem314/react-native-keep-awake": "*",
+    "@types/geojson": "*",
+    "@react-native-community/geolocation": "*"
   },
   "workspaces": [
     "example"

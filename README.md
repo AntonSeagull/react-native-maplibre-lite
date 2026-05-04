@@ -11,6 +11,15 @@ Lightweight MapLibre for React Native powered by `WebView`.
 
 It is designed for teams that want a practical MapLibre integration without native SDK setup complexity.
 
+## Screenshots
+
+<p align="center">
+  <img alt="react-native-maplibre-lite demo 1" src="./demo/demo1.jpeg" width="31%" />
+  &nbsp;
+  <img alt="react-native-maplibre-lite demo 2" src="./demo/demo2.jpeg" width="31%" />
+  &nbsp;
+  <img alt="react-native-maplibre-lite demo 3" src="./demo/demo3.jpeg" width="31%" />
+</p
 ## Features
 
 - MapLibre GL JS in a React Native component
@@ -27,13 +36,13 @@ It is designed for teams that want a practical MapLibre integration without nati
 ## Installation
 
 ```bash
-npm install react-native-maplibre-lite react-native-webview @react-native-async-storage/async-storage
+npm install react-native-maplibre-lite react-native-webview @react-native-async-storage/async-storage @sayem314/react-native-keep-awake @react-native-community/geolocation
 ```
 
 or
 
 ```bash
-yarn add react-native-maplibre-lite react-native-webview @react-native-async-storage/async-storage
+yarn add react-native-maplibre-lite react-native-webview @react-native-async-storage/async-storage @sayem314/react-native-keep-awake @react-native-community/geolocation
 ```
 
 ## Quick Start
@@ -134,6 +143,8 @@ export function NavigatorScreen() {
         navigator
         graphhopperUrl="https://graphhopper.example.com"
         navigatorLang="ru"
+        navigatorProfile="bike"
+        navigatorChrome={{ accent: '#22c55e', routeLine: '#22c55e' }}
         zoomEnabled
         scrollEnabled
         onNavigatorRouteSet={(route) => console.log('route', route)}
@@ -153,98 +164,115 @@ export function NavigatorScreen() {
 }
 ```
 
-`graphhopperUrl` is the base URL without the required `/route` suffix. The plugin sends `POST {graphhopperUrl}/route` with `points_encoded: false`, `instructions: true`, and `locale` from `navigatorLang`.
+`graphhopperUrl` is the base URL without the required `/route` suffix. The plugin sends `POST {graphhopperUrl}/route` with `points_encoded: false`, `instructions: true`, `locale` from `navigatorLang`, and `profile` from `navigatorProfile` (defaults to `car` when omitted or when the string is not a known profile; see `NAVIGATOR_PROFILE_IDS` in the package exports).
 
 Use `setNavigatorPosition(latitude, longitude)` to feed real GPS updates. The WebView side snaps the position to the route, marks arrival, or reroutes when the point is too far from the current route. `pickNavigatorPosition()` is a development helper: the next tap on the map becomes the current navigator position.
+
+### Navigator chrome (`navigatorChrome`)
+
+Optional object passed as `navigatorChrome` on `MapView` (forwarded to WebView `init`). All keys are optional; omit the prop to keep the default blue theme.
+
+| Key             | Purpose                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accent`        | Accent in hex (`#rgb` / `#rrggbb`): map arrow gradient and maneuver icon tile in the HUD (tile background and icon color are derived from it). |
+| `routeLine`     | Main route line color (library default was `#3b82f6`).                                                                                         |
+| `routeOutline`  | Wide underlay for the route line (default was `#1e3a8a`).                                                                                      |
+| `hudBackground` | HUD panel background: any valid CSS value (`rgba(...)`, `linear-gradient(...)`, etc.).                                                         |
+| `hudForeground` | Primary text color on the HUD.                                                                                                                 |
+| `hudMuted`      | Secondary text (street, summary, ETA); when this is hex, the divider tone is derived from it.                                                  |
+
+Speed limit styling on the HUD is not configurable.
 
 ## API
 
 ### `MapView` props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `center` | `[number, number]` | yes | Initial map center as `[lng, lat]` |
-| `zoom` | `number` | yes | Initial zoom level |
-| `mapStyle` | `string` | yes | MapLibre style URL. The style JSON is fetched and cached with `AsyncStorage` |
-| `style` | `StyleProp<ViewStyle>` | yes | Container style |
-| `placeholderTheme` | `'light' \| 'dark'` | no | Placeholder theme before map init. Defaults to `light` |
-| `minZoom` | `number` | no | Minimum zoom |
-| `maxZoom` | `number` | no | Maximum zoom |
-| `zoomEnabled` | `boolean` | no | Enable double-tap zoom, pinch zoom and rotation |
-| `scrollEnabled` | `boolean` | no | Enable pan and scroll gestures |
-| `showSelectPoint` | `boolean` | no | Show animated center pointer |
-| `selectPointColor` | `string` | no | Center pointer color |
-| `selectPointBackgroundColor` | `string` | no | Center pointer background |
-| `autoFitBounds` | `boolean` | no | Automatically fit camera to visible overlays after overlay changes |
-| `fitBoundsPadding` | `number` | no | Padding for `fitBounds()` and `autoFitBounds`. Defaults to `40` |
-| `fitBoundsDuration` | `number` | no | Animation duration for `fitBounds()`. Defaults to `500` |
-| `flyToDuration` | `number` | no | Animation duration for `flyTo()`. Defaults to `500` |
-| `performanceMode` | `'quality' \| 'balanced' \| 'performance'` | no | Rendering quality/performance profile |
-| `pixelRatio` | `number` | no | Manual renderer pixel ratio override |
-| `turboWhileMoving` | `boolean` | no | Hide polyline/polygon overlays while map moves |
-| `debugMode` | `boolean` | no | Enables extra WebView-side debug alerts/logging |
-| `navigator` | `boolean` | no | Enable navigator mode |
-| `graphhopperUrl` | `string` | no | Base GraphHopper URL for navigator routes |
-| `navigatorLang` | `'ru' \| 'en'` | no | Navigator HUD and instruction language. Defaults to `ru` |
-| `onReady` | `() => void` | no | Called after the WebView map is initialized |
-| `onMoveStart` | `(params) => void` | no | `movestart` event |
-| `onMoveEnd` | `(params) => void` | no | `moveend` event |
-| `onZoomStart` | `(params) => void` | no | `zoomstart` event |
-| `onZoomEnd` | `(params) => void` | no | `zoomend` event |
-| `onIdle` | `(params) => void` | no | `idle` event |
-| `onNavigatorRouteSet` | `(params) => void` | no | Called after navigator route creation |
-| `onNavigatorInstruction` | `(params) => void` | no | Called when a navigator instruction is advanced |
-| `onNavigatorPositionSet` | `(params) => void` | no | Called after navigator position update/snap/reroute |
-| `onMapLiteError` | `(error) => void` | no | WebView command error callback |
+| Prop                         | Type                                       | Required | Description                                                                            |
+| ---------------------------- | ------------------------------------------ | -------- | -------------------------------------------------------------------------------------- |
+| `center`                     | `[number, number]`                         | yes      | Initial map center as `[lng, lat]`                                                     |
+| `zoom`                       | `number`                                   | yes      | Initial zoom level                                                                     |
+| `mapStyle`                   | `string`                                   | yes      | MapLibre style URL. The style JSON is fetched and cached with `AsyncStorage`           |
+| `style`                      | `StyleProp<ViewStyle>`                     | yes      | Container style                                                                        |
+| `placeholderTheme`           | `'light' \| 'dark'`                        | no       | Placeholder theme before map init. Defaults to `light`                                 |
+| `minZoom`                    | `number`                                   | no       | Minimum zoom                                                                           |
+| `maxZoom`                    | `number`                                   | no       | Maximum zoom                                                                           |
+| `zoomEnabled`                | `boolean`                                  | no       | Enable double-tap zoom, pinch zoom and rotation                                        |
+| `scrollEnabled`              | `boolean`                                  | no       | Enable pan and scroll gestures                                                         |
+| `showSelectPoint`            | `boolean`                                  | no       | Show animated center pointer                                                           |
+| `selectPointColor`           | `string`                                   | no       | Center pointer color                                                                   |
+| `selectPointBackgroundColor` | `string`                                   | no       | Center pointer background                                                              |
+| `autoFitBounds`              | `boolean`                                  | no       | Automatically fit camera to visible overlays after overlay changes                     |
+| `fitBoundsPadding`           | `number`                                   | no       | Padding for `fitBounds()` and `autoFitBounds`. Defaults to `40`                        |
+| `fitBoundsDuration`          | `number`                                   | no       | Animation duration for `fitBounds()`. Defaults to `500`                                |
+| `flyToDuration`              | `number`                                   | no       | Animation duration for `flyTo()`. Defaults to `500`                                    |
+| `performanceMode`            | `'quality' \| 'balanced' \| 'performance'` | no       | Rendering quality/performance profile                                                  |
+| `pixelRatio`                 | `number`                                   | no       | Manual renderer pixel ratio override                                                   |
+| `turboWhileMoving`           | `boolean`                                  | no       | Hide polyline/polygon overlays while map moves                                         |
+| `debugMode`                  | `boolean`                                  | no       | Enables extra WebView-side debug alerts/logging                                        |
+| `navigator`                  | `boolean`                                  | no       | Enable navigator mode                                                                  |
+| `graphhopperUrl`             | `string`                                   | no       | Base GraphHopper URL for navigator routes                                              |
+| `navigatorLang`              | `'ru' \| 'en'`                             | no       | Navigator HUD and instruction language. Defaults to `ru`                               |
+| `navigatorProfile`           | `NavigatorProfile \| string`               | no       | GraphHopper routing `profile` (`car`, `bike`, `foot`, …). Unknown → `car`              |
+| `navigatorChrome`            | `NavigatorChromeParams`                    | no       | Navigator colors: route line, arrow accent, HUD (see section above). Sent at init only |
+| `onReady`                    | `() => void`                               | no       | Called after the WebView map is initialized                                            |
+| `onMoveStart`                | `(params) => void`                         | no       | `movestart` event                                                                      |
+| `onMoveEnd`                  | `(params) => void`                         | no       | `moveend` event                                                                        |
+| `onZoomStart`                | `(params) => void`                         | no       | `zoomstart` event                                                                      |
+| `onZoomEnd`                  | `(params) => void`                         | no       | `zoomend` event                                                                        |
+| `onIdle`                     | `(params) => void`                         | no       | `idle` event                                                                           |
+| `onNavigatorRouteSet`        | `(params) => void`                         | no       | Called after navigator route creation                                                  |
+| `onNavigatorInstruction`     | `(params) => void`                         | no       | Called when a navigator instruction is advanced                                        |
+| `onNavigatorPositionSet`     | `(params) => void`                         | no       | Called after navigator position update/snap/reroute                                    |
+| `onMapLiteError`             | `(error) => void`                          | no       | WebView command error callback                                                         |
 
 ### `MapView` ref
 
-| Method | Description |
-| --- | --- |
-| `fitBounds()` | Fits camera to current markers, polylines and polygons |
-| `flyTo(center, zoom)` | Animates camera to `[lng, lat]` and zoom |
-| `setNavigatorPoint(latitude, longitude)` | Builds a navigator route to the destination. Requires `navigator` |
-| `advanceNavigatorInstruction()` | Advances to the next navigator instruction |
-| `setNavigatorPosition(latitude, longitude)` | Updates current navigator position from GPS or another source |
-| `pickNavigatorPosition()` | Dev helper: next map tap sets current navigator position |
+| Method                                      | Description                                                       |
+| ------------------------------------------- | ----------------------------------------------------------------- |
+| `fitBounds()`                               | Fits camera to current markers, polylines and polygons            |
+| `flyTo(center, zoom)`                       | Animates camera to `[lng, lat]` and zoom                          |
+| `setNavigatorPoint(latitude, longitude)`    | Builds a navigator route to the destination. Requires `navigator` |
+| `advanceNavigatorInstruction()`             | Advances to the next navigator instruction                        |
+| `setNavigatorPosition(latitude, longitude)` | Updates current navigator position from GPS or another source     |
+| `pickNavigatorPosition()`                   | Dev helper: next map tap sets current navigator position          |
 
 ### `Marker` props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `uniqueId` | `string` | yes | Unique overlay id |
-| `latitude` | `number` | yes | Marker latitude |
-| `longitude` | `number` | yes | Marker longitude |
-| `onPress` | `() => void` | no | Press callback |
-| `ignoreFitBounds` | `boolean` | no | Exclude marker from `fitBounds()` and `autoFitBounds` |
-| `color` | `string` | no | Default MapLibre marker color |
-| `iconUrl` | `string` | no | Custom marker image URL |
-| `iconWidth` | `number` | no | Custom icon width |
-| `iconHeight` | `number` | no | Custom icon height |
-| `html` | `string` | no | Custom marker HTML. If provided, it takes priority over `iconUrl` and `color` |
+| Prop              | Type         | Required | Description                                                                   |
+| ----------------- | ------------ | -------- | ----------------------------------------------------------------------------- |
+| `uniqueId`        | `string`     | yes      | Unique overlay id                                                             |
+| `latitude`        | `number`     | yes      | Marker latitude                                                               |
+| `longitude`       | `number`     | yes      | Marker longitude                                                              |
+| `onPress`         | `() => void` | no       | Press callback                                                                |
+| `ignoreFitBounds` | `boolean`    | no       | Exclude marker from `fitBounds()` and `autoFitBounds`                         |
+| `color`           | `string`     | no       | Default MapLibre marker color                                                 |
+| `iconUrl`         | `string`     | no       | Custom marker image URL                                                       |
+| `iconWidth`       | `number`     | no       | Custom icon width                                                             |
+| `iconHeight`      | `number`     | no       | Custom icon height                                                            |
+| `html`            | `string`     | no       | Custom marker HTML. If provided, it takes priority over `iconUrl` and `color` |
 
 ### `Polyline` props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `uniqueId` | `string` | yes | Unique overlay id |
-| `coordinates` | `[number, number][]` | yes | Line coordinates as `[lng, lat]` |
-| `ignoreFitBounds` | `boolean` | no | Exclude line from `fitBounds()` and `autoFitBounds` |
-| `color` | `string` | no | Line color. Defaults to `#000000` |
-| `width` | `number` | no | Line width. Defaults to `4` |
+| Prop              | Type                 | Required | Description                                         |
+| ----------------- | -------------------- | -------- | --------------------------------------------------- |
+| `uniqueId`        | `string`             | yes      | Unique overlay id                                   |
+| `coordinates`     | `[number, number][]` | yes      | Line coordinates as `[lng, lat]`                    |
+| `ignoreFitBounds` | `boolean`            | no       | Exclude line from `fitBounds()` and `autoFitBounds` |
+| `color`           | `string`             | no       | Line color. Defaults to `#000000`                   |
+| `width`           | `number`             | no       | Line width. Defaults to `4`                         |
 
 ### `Polygon` props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `uniqueId` | `string` | yes | Unique overlay id |
-| `coordinates` | `[number, number][]` | yes | Polygon ring coordinates as `[lng, lat]` |
-| `ignoreFitBounds` | `boolean` | no | Exclude polygon from `fitBounds()` and `autoFitBounds` |
-| `fillColor` | `string` | no | Fill color |
-| `fillOpacity` | `number` | no | Fill opacity |
-| `strokeColor` | `string` | no | Stroke color |
-| `strokeOpacity` | `number` | no | Stroke opacity |
-| `strokeWidth` | `number` | no | Stroke width |
+| Prop              | Type                 | Required | Description                                            |
+| ----------------- | -------------------- | -------- | ------------------------------------------------------ |
+| `uniqueId`        | `string`             | yes      | Unique overlay id                                      |
+| `coordinates`     | `[number, number][]` | yes      | Polygon ring coordinates as `[lng, lat]`               |
+| `ignoreFitBounds` | `boolean`            | no       | Exclude polygon from `fitBounds()` and `autoFitBounds` |
+| `fillColor`       | `string`             | no       | Fill color                                             |
+| `fillOpacity`     | `number`             | no       | Fill opacity                                           |
+| `strokeColor`     | `string`             | no       | Stroke color                                           |
+| `strokeOpacity`   | `number`             | no       | Stroke opacity                                         |
+| `strokeWidth`     | `number`             | no       | Stroke width                                           |
 
 ## Performance Tuning (Android)
 

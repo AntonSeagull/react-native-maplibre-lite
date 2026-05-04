@@ -382,7 +382,11 @@ export function applyMaplite3dBuildings(map: Map): boolean {
 }
 
 /**
- * Без pitch здания смотрятся «плоскими» — плавно увеличиваем pitch при zoom in.
+ * Без pitch здания смотрятся «плоскими» — поднимаем наклон к мелкому масштабу.
+ * В MapLibre `setPitch` = `jumpTo({ pitch })` и срывает любой идущий ease
+ * (`fitBounds`, `flyTo`, инерция зума). Поэтому не подписываемся на каждый
+ * кадр `zoom`: только `zoomend` и первая установка после привязки.
+ * Наклон обновляется после остановки зума, не по кадрам — это допустимо.
  * Если пользователь сам наклонил карту — больше его pitch не трогаем.
  * Идемпотентно: повторный вызов на той же Map игнорируется.
  */
@@ -403,10 +407,8 @@ export function bindCameraPitchFor3dBuildings(map: Map): void {
 
   let userTouchedPitch = false
   let programmaticPitch = false
-  let raf: number | null = null
 
   const apply = () => {
-    raf = null
     if (userTouchedPitch) return
     const next = desiredPitch(map.getZoom())
     if (Math.abs(map.getPitch() - next) > 0.25) {
@@ -419,11 +421,6 @@ export function bindCameraPitchFor3dBuildings(map: Map): void {
     }
   }
 
-  const schedule = () => {
-    if (raf != null) return
-    raf = requestAnimationFrame(apply)
-  }
-
   map.on('pitchstart', (e: MapLibreEvent) => {
     if (programmaticPitch) return
     if ((e as { originalEvent?: unknown }).originalEvent != null) {
@@ -431,7 +428,6 @@ export function bindCameraPitchFor3dBuildings(map: Map): void {
     }
   })
 
-  map.on('zoom', schedule)
   map.on('zoomend', apply)
 
   apply()

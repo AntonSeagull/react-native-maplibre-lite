@@ -15,6 +15,34 @@ import {
 /** [longitude, latitude] — единый формат для Navigator (как в GeoJSON / GraphHopper). */
 export type NavigatorPoint = [number, number]
 
+/** Допустимые значения `profile` для GraphHopper `POST …/route` (см. документацию GH). */
+export const NAVIGATOR_PROFILE_IDS = [
+  'car',
+  'car_avoid_motorway',
+  'car_avoid_ferry',
+  'car_avoid_toll',
+  'small_truck',
+  'truck',
+  'scooter',
+  'foot',
+  'hike',
+  'bike',
+  'mtb',
+  'racingbike',
+  'ecargobike',
+] as const
+
+export type NavigatorProfile = (typeof NAVIGATOR_PROFILE_IDS)[number]
+
+/** `init.navigatorProfile` / опция `Navigator`: неизвестное или отсутствие → `car`. */
+export function normalizeNavigatorProfile(value: unknown): NavigatorProfile {
+  if (typeof value !== 'string') return 'car'
+  const v = value.trim()
+  return (NAVIGATOR_PROFILE_IDS as readonly string[]).includes(v)
+    ? (v as NavigatorProfile)
+    : 'car'
+}
+
 /**
  * Поворотная инструкция от GraphHopper. Поля документированы тут:
  * https://docs.graphhopper.com/#operation/postRoute (раздел `instructions`).
@@ -37,6 +65,255 @@ const NAV_ROUTE_SOURCE = 'maplite-navigator-route'
 const NAV_ROUTE_LAYER = 'maplite-navigator-route-line'
 const NAV_ROUTE_LAYER_BG = 'maplite-navigator-route-bg'
 
+type Rgb = { r: number; g: number; b: number }
+
+const DEF_ROUTE_LINE = '#3b82f6'
+const DEF_ROUTE_OUTLINE = '#1e3a8a'
+const DEF_ACCENT = '#3b82f6'
+const DEF_HUD_BG = 'rgba(15, 23, 42, 0.92)'
+const DEF_HUD_FG = '#f8fafc'
+const DEF_HUD_MUTED = '#94a3b8'
+const DEF_HUD_SUBTLE = '#e2e8f0'
+const DEF_HUD_SUMMARY = '#cbd5e1'
+const RGB_WHITE: Rgb = { r: 255, g: 255, b: 255 }
+const RGB_NEAR_BLACK: Rgb = { r: 2, g: 6, b: 23 }
+const RGB_SLATE_SHADOW: Rgb = { r: 15, g: 23, b: 42 }
+
+/** Крупная стрелка только в режиме навигатора (экземпляр `Navigator`). */
+const ARROW_BASE_SIZE_PX = 72
+
+function clamp255(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)))
+}
+
+function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return {
+    r: clamp255(a.r + (b.r - a.r) * t),
+    g: clamp255(a.g + (b.g - a.g) * t),
+    b: clamp255(a.b + (b.b - a.b) * t),
+  }
+}
+
+function toHex({ r, g, b }: Rgb): string {
+  const h = (n: number) => n.toString(16).padStart(2, '0')
+  return `#${h(r)}${h(g)}${h(b)}`
+}
+
+/** Только `#rgb` / `#rrggbb` — для `accent` и смешивания HUD. */
+function parseHexColor(input: string | undefined): Rgb | null {
+  if (typeof input !== 'string') return null
+  const s = input.trim()
+  if (!/^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$/.test(s)) return null
+  if (s.length === 4) {
+    const r = parseInt(s[1]! + s[1]!, 16)
+    const g = parseInt(s[2]! + s[2]!, 16)
+    const b = parseInt(s[3]! + s[3]!, 16)
+    return { r, g, b }
+  }
+  return {
+    r: parseInt(s.slice(1, 3), 16),
+    g: parseInt(s.slice(3, 5), 16),
+    b: parseInt(s.slice(5, 7), 16),
+  }
+}
+
+function relLuminance(c: Rgb): number {
+  const lin = (v: number) => {
+    const x = v / 255
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
+  }
+  const R = lin(c.r)
+  const G = lin(c.g)
+  const B = lin(c.b)
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B
+}
+
+function rgba(rgb: Rgb, a: number): string {
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
+}
+
+function mixCssHexOr(
+  a: string,
+  b: string,
+  t: number,
+  fallback: string
+): string {
+  const ra = parseHexColor(a)
+  const rb = parseHexColor(b)
+  if (!ra || !rb) return fallback
+  return toHex(mixRgb(ra, rb, t))
+}
+
+function dividerFromMutedCss(muted: string): string {
+  const m = parseHexColor(muted)
+  if (m) return rgba(m, 0.28)
+  return 'rgba(148, 163, 184, 0.28)'
+}
+
+/**
+ * Необязательное оформление навигатора (маршрут, стрелка, верхняя панель).
+ * Знак скорости не настраивается — стиль как в CSS по умолчанию.
+ */
+export type NavigatorChromeParams = {
+  /** Акцент: градиент стрелки на карте + плитка иконки манёвра в HUD. */
+  accent?: string
+  /** Основная линия маршрута. */
+  routeLine?: string
+  /** Подложка линии (шире, полупрозрачная). */
+  routeOutline?: string
+  /** Фон панели инструкций (любой валидный CSS `background`). */
+  hudBackground?: string
+  /** Цвет основных подписей на панели. */
+  hudForeground?: string
+  /** Приглушённые подписи (улица, сводка, ETA). */
+  hudMuted?: string
+}
+
+type ResolvedNavigatorChrome = {
+  routeLine: string
+  routeOutline: string
+  arrow: {
+    halo: [Rgb, Rgb, Rgb]
+    haloOp: [number, number, number]
+    face: [Rgb, Rgb, Rgb]
+    depth: [Rgb, Rgb]
+    stroke: string
+    dropShadow: string
+  }
+  hudVars: Record<string, string>
+}
+
+function resolveNavigatorChrome(
+  input?: NavigatorChromeParams | null
+): ResolvedNavigatorChrome {
+  const accentRgb =
+    parseHexColor(input?.accent) ?? parseHexColor(DEF_ACCENT) ?? { r: 59, g: 130, b: 246 }
+
+  const routeLine =
+    typeof input?.routeLine === 'string' && input.routeLine.trim()
+      ? input.routeLine.trim()
+      : DEF_ROUTE_LINE
+  const routeOutline =
+    typeof input?.routeOutline === 'string' && input.routeOutline.trim()
+      ? input.routeOutline.trim()
+      : DEF_ROUTE_OUTLINE
+
+  const hudBackground =
+    typeof input?.hudBackground === 'string' && input.hudBackground.trim()
+      ? input.hudBackground.trim()
+      : DEF_HUD_BG
+  const hudForeground =
+    typeof input?.hudForeground === 'string' && input.hudForeground.trim()
+      ? input.hudForeground.trim()
+      : DEF_HUD_FG
+  const hudMuted =
+    typeof input?.hudMuted === 'string' && input.hudMuted.trim()
+      ? input.hudMuted.trim()
+      : DEF_HUD_MUTED
+
+  const hudSubtle = mixCssHexOr(hudForeground, hudMuted, 0.52, DEF_HUD_SUBTLE)
+  const hudSummary = mixCssHexOr(hudForeground, hudMuted, 0.3, DEF_HUD_SUMMARY)
+  const hudDivider = dividerFromMutedCss(hudMuted)
+
+  const iconFg = toHex(mixRgb(accentRgb, RGB_WHITE, 0.38))
+  const iconBg = rgba(accentRgb, 0.18)
+
+  const faceMid = mixRgb(accentRgb, RGB_NEAR_BLACK, 0.22)
+  const stroke = relLuminance(faceMid) > 0.52 ? '#0f172a' : '#f8fafc'
+  const shadowRgb = mixRgb(accentRgb, RGB_SLATE_SHADOW, 0.55)
+
+  const arrow = {
+    halo: [
+      mixRgb(accentRgb, RGB_WHITE, 0.48),
+      accentRgb,
+      mixRgb(accentRgb, RGB_NEAR_BLACK, 0.45),
+    ] as [Rgb, Rgb, Rgb],
+    haloOp: [0.42, 0.14, 0] as [number, number, number],
+    face: [
+      mixRgb(accentRgb, RGB_WHITE, 0.78),
+      faceMid,
+      mixRgb(accentRgb, RGB_NEAR_BLACK, 0.82),
+    ] as [Rgb, Rgb, Rgb],
+    depth: [mixRgb(accentRgb, RGB_NEAR_BLACK, 0.48), RGB_NEAR_BLACK] as [Rgb, Rgb],
+    stroke,
+    dropShadow: `drop-shadow(0 4px 6px ${rgba(shadowRgb, 0.45)})`,
+  }
+
+  return {
+    routeLine,
+    routeOutline,
+    arrow,
+    hudVars: {
+      '--nav-hud-bg': hudBackground,
+      '--nav-hud-fg': hudForeground,
+      '--nav-hud-subtle': hudSubtle,
+      '--nav-hud-muted': hudMuted,
+      '--nav-hud-summary': hudSummary,
+      '--nav-hud-divider': hudDivider,
+      '--nav-hud-icon-bg': iconBg,
+      '--nav-hud-icon-fg': iconFg,
+    },
+  }
+}
+
+function applyNavigatorHudTheme(
+  el: HTMLElement,
+  chrome: ResolvedNavigatorChrome
+): void {
+  for (const [k, v] of Object.entries(chrome.hudVars)) {
+    el.style.setProperty(k, v)
+  }
+}
+
+function createArrowElement(
+  gradientUid: string,
+  chrome: ResolvedNavigatorChrome
+): HTMLElement {
+  const { arrow } = chrome
+  const h = arrow.halo
+  const f = arrow.face
+  const d = arrow.depth
+  const idHalo = `maplite-nav-halo-${gradientUid}`
+  const idFace = `maplite-nav-arrow-face-${gradientUid}`
+  const idDepth = `maplite-nav-arrow-depth-${gradientUid}`
+
+  const el = document.createElement('div')
+  el.style.width = `${ARROW_BASE_SIZE_PX}px`
+  el.style.height = `${ARROW_BASE_SIZE_PX}px`
+  el.style.willChange = 'transform'
+  el.style.pointerEvents = 'none'
+  el.style.filter = arrow.dropShadow
+  el.innerHTML = `
+    <svg width="${ARROW_BASE_SIZE_PX}" height="${ARROW_BASE_SIZE_PX}" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="${idHalo}" cx="50%" cy="52%" r="52%">
+          <stop offset="0%" stop-color="${toHex(h[0]!)}" stop-opacity="${arrow.haloOp[0]}"/>
+          <stop offset="55%" stop-color="${toHex(h[1]!)}" stop-opacity="${arrow.haloOp[1]}"/>
+          <stop offset="100%" stop-color="${toHex(h[2]!)}" stop-opacity="${arrow.haloOp[2]}"/>
+        </radialGradient>
+        <linearGradient id="${idFace}" x1="28%" y1="12%" x2="72%" y2="92%">
+          <stop offset="0%" stop-color="${toHex(f[0]!)}"/>
+          <stop offset="38%" stop-color="${toHex(f[1]!)}"/>
+          <stop offset="100%" stop-color="${toHex(f[2]!)}"/>
+        </linearGradient>
+        <linearGradient id="${idDepth}" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${toHex(d[0]!)}"/>
+          <stop offset="100%" stop-color="${toHex(d[1]!)}"/>
+        </linearGradient>
+      </defs>
+      <circle cx="22" cy="22" r="22" fill="url(#${idHalo})"/>
+      <g>
+        <path d="M22 6 L33 32 L22 25 L11 32 Z" fill="url(#${idDepth})"
+              transform="translate(1.1 1.6)" stroke="none"/>
+        <path d="M22 6 L33 32 L22 25 L11 32 Z"
+              fill="url(#${idFace})" stroke="${arrow.stroke}" stroke-width="2.6"
+              stroke-linejoin="round"/>
+      </g>
+    </svg>
+  `
+  return el
+}
+
 /** «Близкий» зум как в навигаторе — видны ближайшие здания и поворот. */
 const NAV_ZOOM = 17
 /** Наклон камеры: достаточно агрессивный, но 75 keeps headroom for built‑in maxPitch. */
@@ -50,9 +327,6 @@ export const NAVIGATOR_MIN_MAX_PITCH = 75
  */
 const NAV_USER_IDLE_RECENTER_MS = 4_000
 
-/** Крупная стрелка только в режиме навигатора (экземпляр `Navigator`). */
-const ARROW_BASE_SIZE_PX = 72
-
 /** Bearing (degrees, clockwise from north) от точки `from` к точке `to`. */
 function bearingBetween(from: NavigatorPoint, to: NavigatorPoint): number {
   const toRad = (d: number) => (d * Math.PI) / 180
@@ -65,49 +339,6 @@ function bearingBetween(from: NavigatorPoint, to: NavigatorPoint): number {
     Math.cos(lat1) * Math.sin(lat2) -
     Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
   return (toDeg(Math.atan2(y, x)) + 360) % 360
-}
-
-/**
- * SVG-«шеврон» текущего положения. Лежит на плоскости карты
- * (`pitchAlignment: 'map'`) — при наклоне выглядит как стрелка на дороге.
- * Градиент + задний слой дают ощущение объёма.
- */
-function createArrowElement(): HTMLElement {
-  const el = document.createElement('div')
-  el.style.width = `${ARROW_BASE_SIZE_PX}px`
-  el.style.height = `${ARROW_BASE_SIZE_PX}px`
-  el.style.willChange = 'transform'
-  el.style.pointerEvents = 'none'
-  el.style.filter = 'drop-shadow(0 4px 6px rgba(15, 23, 42, 0.45))'
-  el.innerHTML = `
-    <svg width="${ARROW_BASE_SIZE_PX}" height="${ARROW_BASE_SIZE_PX}" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="maplite-nav-halo" cx="50%" cy="52%" r="52%">
-          <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.42"/>
-          <stop offset="55%" stop-color="#3b82f6" stop-opacity="0.14"/>
-          <stop offset="100%" stop-color="#1e40af" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="maplite-nav-arrow-face" x1="28%" y1="12%" x2="72%" y2="92%">
-          <stop offset="0%" stop-color="#bfdbfe"/>
-          <stop offset="38%" stop-color="#2563eb"/>
-          <stop offset="100%" stop-color="#172554"/>
-        </linearGradient>
-        <linearGradient id="maplite-nav-arrow-depth" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#1e3a8a"/>
-          <stop offset="100%" stop-color="#020617"/>
-        </linearGradient>
-      </defs>
-      <circle cx="22" cy="22" r="22" fill="url(#maplite-nav-halo)"/>
-      <g>
-        <path d="M22 6 L33 32 L22 25 L11 32 Z" fill="url(#maplite-nav-arrow-depth)"
-              transform="translate(1.1 1.6)" stroke="none"/>
-        <path d="M22 6 L33 32 L22 25 L11 32 Z"
-              fill="url(#maplite-nav-arrow-face)" stroke="#f8fafc" stroke-width="2.6"
-              stroke-linejoin="round"/>
-      </g>
-    </svg>
-  `
-  return el
 }
 
 export type RoutePath = {
@@ -172,12 +403,13 @@ async function fetchRoute(
   from: NavigatorPoint,
   to: NavigatorPoint,
   signal: AbortSignal | undefined,
-  locale: NavigatorLang
+  locale: NavigatorLang,
+  profile: NavigatorProfile
 ): Promise<RoutePath> {
   const ghLocale = locale === 'en' ? 'en' : 'ru'
   const basePayload = {
     points: [from, to] as NavigatorPoint[],
-    profile: 'car',
+    profile,
     points_encoded: false,
     instructions: true,
     locale: ghLocale,
@@ -391,6 +623,13 @@ export type NavigatorOptions = {
    * Язык HUD и запросов инструкций GraphHopper (`locale`). По умолчанию `ru`.
    */
   lang?: NavigatorLang
+  /**
+   * Профиль маршрутизации GraphHopper (`profile` в теле `POST …/route`).
+   * Задаётся из `init.navigatorProfile`. По умолчанию `car`.
+   */
+  navigatorProfile?: unknown
+  /** Оформление маршрута / стрелки / панели; из `init.navigatorChrome`. */
+  chrome?: NavigatorChromeParams | null
 }
 
 /**
@@ -405,6 +644,7 @@ export type NavigatorOptions = {
 export class Navigator {
   private readonly map: Map
   private readonly graphhopperBaseUrl: string | null
+  private readonly graphhopperProfile: NavigatorProfile
   private readonly lang: NavigatorLang
   private readonly navStrings: NavigatorStrings
   private currentPosition: NavigatorPoint
@@ -469,6 +709,8 @@ export class Navigator {
     this.scheduleIdleRecenter()
   }
 
+  private readonly chrome: ResolvedNavigatorChrome
+
   constructor(map: Map, options: NavigatorOptions) {
     this.map = map
     this.lang = normalizeNavigatorLang(options.lang)
@@ -478,10 +720,13 @@ export class Navigator {
       gh == null || typeof gh !== 'string' || !gh.trim()
         ? null
         : gh.trim().replace(/\/+$/, '')
+    this.graphhopperProfile = normalizeNavigatorProfile(options.navigatorProfile)
     this.currentPosition = options.position
     this.heading = options.heading ?? 0
 
-    const el = createArrowElement()
+    this.chrome = resolveNavigatorChrome(options.chrome)
+    const gradientUid = Math.random().toString(36).slice(2, 10)
+    const el = createArrowElement(gradientUid, this.chrome)
     this.arrowMarker = new maplibregl.Marker({
       element: el,
       rotationAlignment: 'map',
@@ -493,6 +738,7 @@ export class Navigator {
       .addTo(map)
 
     this.hudEl = createHudElement()
+    applyNavigatorHudTheme(this.hudEl, this.chrome)
     this.map.getContainer().appendChild(this.hudEl)
     this.renderHud()
 
@@ -541,7 +787,8 @@ export class Navigator {
       this.currentPosition,
       destination,
       ctrl.signal,
-      this.lang
+      this.lang,
+      this.graphhopperProfile
     )
     if (ctrl.signal.aborted) return path
 
@@ -999,7 +1246,7 @@ export class Navigator {
       source: NAV_ROUTE_SOURCE,
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
-        'line-color': '#1e3a8a',
+        'line-color': this.chrome.routeOutline,
         'line-width': 10,
         'line-opacity': 0.55,
       },
@@ -1011,7 +1258,7 @@ export class Navigator {
       source: NAV_ROUTE_SOURCE,
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
-        'line-color': '#3b82f6',
+        'line-color': this.chrome.routeLine,
         'line-width': 6,
       },
     })

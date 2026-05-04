@@ -1,4 +1,14 @@
 .maplite-nav-hud {
+  --nav-hud-bg: rgba(15, 23, 42, 0.92);
+  --nav-hud-fg: #f8fafc;
+  --nav-hud-subtle: #e2e8f0;
+  --nav-hud-muted: #94a3b8;
+  --nav-hud-summary: #cbd5e1;
+  --nav-hud-divider: rgba(148, 163, 184, 0.28);
+  --nav-hud-shadow: 0 10px 24px rgba(15, 23, 42, 0.32);
+  --nav-hud-icon-bg: rgba(59, 130, 246, 0.18);
+  --nav-hud-icon-fg: #60a5fa;
+
   position: absolute;
   top: 12px;
   left: 12px;
@@ -12,9 +22,9 @@
   padding: 12px 14px;
   border-radius: 14px;
 
-  background: rgba(15, 23, 42, 0.92);
-  color: #f8fafc;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.32);
+  background: var(--nav-hud-bg);
+  color: var(--nav-hud-fg);
+  box-shadow: var(--nav-hud-shadow);
 
   font:
     14px/1.3 system-ui,
@@ -35,8 +45,8 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.18);
-  color: #60a5fa;
+  background: var(--nav-hud-icon-bg);
+  color: var(--nav-hud-icon-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -60,7 +70,7 @@
 .maplite-nav-hud__text {
   font-size: 14px;
   font-weight: 500;
-  color: #e2e8f0;
+  color: var(--nav-hud-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -68,7 +78,7 @@
 
 .maplite-nav-hud__street {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--nav-hud-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -77,10 +87,10 @@
 .maplite-nav-hud__summary {
   margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px solid rgba(148, 163, 184, 0.28);
+  border-top: 1px solid var(--nav-hud-divider);
   font-size: 12px;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--nav-hud-summary);
   line-height: 1.35;
   white-space: normal;
 }
@@ -89,7 +99,7 @@
   margin-top: 2px;
   font-size: 11px;
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--nav-hud-muted);
   line-height: 1.35;
 }
 
@@ -123,7 +133,7 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--nav-hud-muted);
   background: rgba(148, 163, 184, 0.16);
 }
 
